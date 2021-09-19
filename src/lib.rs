@@ -1,13 +1,13 @@
 use proc_macro::{TokenStream};
 use quote::{quote, ToTokens, TokenStreamExt, format_ident};
-use syn::{LitStr, parse_macro_input, Token};
+use syn::{LitStr, parse_macro_input, Token, Expr};
 use syn::parse::{Parse, ParseStream};
 use proc_macro2::Punct;
 
 struct InputStruct {
     program: LitStr,
     input: LitStr,
-    expected: LitStr
+    expected: LitStr,
 }
 
 impl ToTokens for InputStruct {
@@ -32,7 +32,7 @@ impl Parse for InputStruct {
         Ok(InputStruct {
             program: p,
             input: i,
-            expected: e
+            expected: e,
         })
     }
 }
@@ -51,7 +51,7 @@ pub fn brainfunct_protect(input: TokenStream) -> TokenStream {
     let indices = 1..(funcs.len());
     let names = indices.clone().map(|i| format_ident!("func{}", i));
     let call_function_tokens = quote! {
-        const fn call(state: BrainFunctState) -> BrainFunctState {
+        const fn c(state: &mut BrainFunctState) -> &mut BrainFunctState {
             match state.tape[state.tape_ptr as usize] as usize {
                 #(#indices => #names(state)),*,
                 _ => state
@@ -59,22 +59,44 @@ pub fn brainfunct_protect(input: TokenStream) -> TokenStream {
         }
     };
 
-    let names = (1..funcs.len()+1).map(|i| format_ident!("func{}", i));
-    let defs= funcs.iter().map(|func| {
-        let mut inner = quote! {state};
+    let names = (1..funcs.len() + 1).map(|i| format_ident!("func{}", i));
+    let defs = funcs.iter().map(|func| {
+        let mut inner = vec!["state".to_string()];
         for op in func {
-            inner = match op {
-                b'>' => quote! {move_right(#inner)},
-                b'<' => quote! {move_left(#inner)},
-                b'+' => quote! {increment(#inner)},
-                b'-' => quote! {decrement(#inner)},
-                b'.' => quote! {output(#inner)},
-                b',' => quote! {input(#inner)},
-                b'@' => quote! {call(#inner)},
+            match op {
+                b'>' => {
+                    inner.insert(0, "r(".into());
+                    inner.push(")".into());
+                }
+                b'<' => {
+                    inner.insert(0, "l(".into());
+                    inner.push(")".into());
+                }
+                b'+' => {
+                    inner.insert(0, "i(".into());
+                    inner.push(")".into());
+                }
+                b'-' => {
+                    inner.insert(0, "d(".into());
+                    inner.push(")".into());
+                }
+                b'.' => {
+                    inner.insert(0, "output(".into());
+                    inner.push(")".into());
+                }
+                b',' => {
+                    inner.insert(0, "input(".into());
+                    inner.push(")".into());
+                }
+                b'@' => {
+                    inner.insert(0, "c(".into());
+                    inner.push(")".into());
+                }
                 c => panic!("You've used an illegal character: {}", c)
             }
         }
-        inner
+        let merged = inner.join("");
+        syn::parse_str::<Expr>(&merged).unwrap()
     });
 
     let expected = input.expected.value();
@@ -83,7 +105,7 @@ pub fn brainfunct_protect(input: TokenStream) -> TokenStream {
     let input_str = input.input.value();
     let input_iter = input_str.bytes().chain(std::iter::repeat(0)).take(u16::MAX as usize);
 
-    let main_func = format_ident!("func{}", funcs.len() - 1);
+    let main_func = format_ident!("func{}", funcs.len());
     let tokens = quote! {
         struct BrainFunctState {
             tape: [u8; u16::MAX as usize],
@@ -94,33 +116,33 @@ pub fn brainfunct_protect(input: TokenStream) -> TokenStream {
             output_ptr: u16,
         }
 
-        const fn move_right(mut state: BrainFunctState) -> BrainFunctState {
-            state.tape_ptr += 1;
+        const fn r(state: &mut BrainFunctState) -> &mut BrainFunctState {
+            state.tape_ptr = state.tape_ptr.wrapping_add(1);
             state
         }
 
-        const fn move_left(mut state: BrainFunctState) -> BrainFunctState {
-            state.tape_ptr -= 1;
+        const fn l(state: &mut BrainFunctState) -> &mut BrainFunctState {
+            state.tape_ptr = state.tape_ptr.wrapping_sub(1);
             state
         }
 
-        const fn increment(mut state: BrainFunctState) -> BrainFunctState {
-            state.tape[state.tape_ptr as usize] += 1;
+        const fn i(state: &mut BrainFunctState) -> &mut BrainFunctState {
+            state.tape[state.tape_ptr as usize] = state.tape[state.tape_ptr as usize].wrapping_add(1);
             state
         }
 
-        const fn decrement(mut state: BrainFunctState) -> BrainFunctState {
-            state.tape[state.tape_ptr as usize] -= 1;
+        const fn d(state: &mut BrainFunctState) -> &mut BrainFunctState {
+            state.tape[state.tape_ptr as usize] = state.tape[state.tape_ptr as usize].wrapping_sub(1);
             state
         }
 
-        const fn output(mut state: BrainFunctState) -> BrainFunctState {
+        const fn output(state: &mut BrainFunctState) -> &mut BrainFunctState {
             state.output[state.output_ptr as usize] = state.tape[state.tape_ptr as usize];
             state.output_ptr += 1;
             state
         }
 
-        const fn input(mut state: BrainFunctState) -> BrainFunctState {
+        const fn input(state: &mut BrainFunctState) -> &mut BrainFunctState {
             state.tape[state.tape_ptr as usize] = state.input[state.input_ptr as usize];
             state.input_ptr += 1;
             state
@@ -128,7 +150,7 @@ pub fn brainfunct_protect(input: TokenStream) -> TokenStream {
 
         #call_function_tokens
 
-       #(const fn #names(state: BrainFunctState) -> BrainFunctState {
+        #(const fn #names(state: &mut BrainFunctState) -> &mut BrainFunctState {
             #defs
         }
         )*
@@ -136,15 +158,16 @@ pub fn brainfunct_protect(input: TokenStream) -> TokenStream {
         static S: () = {
             const fn die() { die() }
             let input = [#(#input_iter),*];
-            let final_state = #main_func(BrainFunctState {
+            let mut state = BrainFunctState {
                 tape: [0u8; u16::MAX as usize],
                 tape_ptr: 0u16,
                 input,
                 input_ptr: 0u16,
                 output: [0u8; u16::MAX as usize],
                 output_ptr: 0u16,
-            });
-            if !(#(final_state.output[#indices] == #expected_bytes)&&*) {
+            };
+            #main_func(&mut state);
+            if !(#(state.output[#indices] == #expected_bytes)&&*) {
                 die()
             }
         };
