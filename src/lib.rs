@@ -51,7 +51,7 @@ pub fn my_macro(input: TokenStream) -> TokenStream {
         }
     }
 
-    let indices = 0..(funcs.len() - 1);
+    let indices = 1..(funcs.len());
     let names = indices.clone().map(|i| format_ident!("func{}", i));
     let call_function_tokens = quote! {
         const fn call(state: BrainFunctState) -> BrainFunctState {
@@ -62,7 +62,7 @@ pub fn my_macro(input: TokenStream) -> TokenStream {
         }
     };
 
-    let names = (0..funcs.len()).map(|i| format_ident!("func{}", i));
+    let names = (1..funcs.len()+1).map(|i| format_ident!("func{}", i));
     let defs= funcs.iter().map(|func| {
         let mut inner = quote! {state};
         for op in func {
