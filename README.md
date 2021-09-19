@@ -4,6 +4,8 @@ This crate defines a single macro that is a brainfunct
 compile-time interpreter. One example is as follows 
 ```rust
 #![recursion_limit = "18446744073709551615"]
+#![feature(const_mut_refs)]
+
 use program_protected_compile::brainfunct_protect;
 
 fn main() {
