@@ -37,11 +37,8 @@ impl Parse for InputStruct {
     }
 }
 
-/// Example of [function-like procedural macro][1].
-///
-/// [1]: https://doc.rust-lang.org/reference/procedural-macros.html#function-like-procedural-macros
 #[proc_macro]
-pub fn my_macro(input: TokenStream) -> TokenStream {
+pub fn brainfunct_protect(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as InputStruct);
     let mut funcs = Vec::new();
     for c in input.program.value().bytes() {
