@@ -6,7 +6,7 @@ compile-time interpreter. One example is as follows
 #![recursion_limit = "18446744073709551615"]
 #![feature(const_mut_refs)]
 
-use program_protected_compile::brainfunct_protect;
+use compile_protection::brainfunct_protect;
 
 fn main() {
     brainfunct_protect!("/,./+@", "1", "1");
