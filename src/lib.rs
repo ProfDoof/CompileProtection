@@ -109,25 +109,6 @@ impl Parse for BrainfunctProgram {
     }
 }
 
-struct BrainfunctArray {
-    value: [u8; u16::MAX as usize],
-}
-
-impl Parse for BrainfunctArray {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        input.parse::<Token![,]>()?;
-        let array_str: LitStr = input.parse()?;
-        let mut temp = BrainfunctArray {
-            value: [0u8; u16::MAX as usize],
-        };
-        for (index, c) in array_str.value().bytes().enumerate() {
-            temp.value[index] = c
-        }
-
-        Result::Ok(temp)
-    }
-}
-
 #[proc_macro]
 pub fn fast_brainfunct_protect(input: TokenStream) -> TokenStream {
     let program = parse_macro_input!(input as BrainfunctProgram);
